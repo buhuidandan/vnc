@@ -8,7 +8,7 @@ extern "C"
 }
 #include "tunnel.h"
 
-Tunnel *Tunnel::allocTun(const std::string &devName)
+Tunnel *Tunnel::allocTun(TunnelType type)
 {
     char *dev = NULL;
     struct ifreq ifr;
@@ -34,9 +34,6 @@ Tunnel *Tunnel::allocTun(const std::string &devName)
     return new Tunnel(ifr.ifr_name, fd); 
 }
 
-Tunnel::Tunnel(const char *devName, int fd): m_devName(devName), m_fd(fd)
-{
-}
 Tunnel::~Tunnel()
 {
     if (m_fd >= 0)
@@ -45,11 +42,13 @@ Tunnel::~Tunnel()
     }
 }
 
-bool Tunnel::start()
+void Tunnel::read(ProtoBufPtr pBuf)
 {
-    return false;
+    return;
 }
 
-void Tunnel::stop()
+void Tunnel::write(ProtoBufPtr pBuf)
 {
+    return;
 }
+

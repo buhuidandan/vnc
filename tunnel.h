@@ -1,27 +1,29 @@
 #ifndef _TUNNEL_H_
 #define _TUNNEL_H_
 
-#include <string>
-#include <cstddef>
+#include "ProtoBufPtr.h"
 
 class Tunnel
 {
 public:
-    static Tunnel *allocTun(const std::string &devName);
+    enum TunnelType
+    {
+        TUN_MAC = 0,
+        TUN_IP
+    };
+    static Tunnel *allocTun(TunnelType type);
     ~Tunnel();
-    bool start();
-    void stop();
-    std::size_t read(char *buf, std::size_t len);
-    std::size_t write(const char *buf, std::size_t len);
-    std::string getDevName() const;
+    void read(ProtoBufPtr pBuf);
+    void write(ProtoBufPtr pBuf);
+    TunnelType getType() const { return m_type; }
 
 private:
-    Tunnel(const char *devName, int fd);
+    Tunnel(int fd, TunnelType type): m_fd(fd), m_type(type) {}
     Tunnel(const Tunnel &);
     operator=(const Tunnel &);
 
-    std::string m_devName;
     int m_fd;
+    TunnelType m_type;
 };
 
 #endif // _TUNNEL_H_
