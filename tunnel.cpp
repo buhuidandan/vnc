@@ -6,7 +6,11 @@ extern "C"
 #include <linux/if.h>
 #include <linux/if_tun.h>
 }
+#include <cstring>
+#include "MsgLogger.h"
 #include "tunnel.h"
+
+const char *TUN_DEV_NAME = "PaopaoDandan";
 
 Tunnel *Tunnel::allocTun(TunnelType type)
 {
@@ -19,12 +23,9 @@ Tunnel *Tunnel::allocTun(TunnelType type)
         // log
         return nullptr;
     }
-    memset(&ifr, 0, sizeof(ifr));
+    std::memset(&ifr, 0, sizeof(ifr));
     ifr.ifr_flags = IFF_TAP | IFF_NO_PI;
-    if (!devName.empty())
-    {
-        std::strncpy(ifr.ifr_name, devName.c_str(), IFNAMSIZ);
-    }
+    std::strncpy(ifr.ifr_name, TUN_DEV_NAME, IFNAMSIZ);
     if (0 > (err = ioctl(fd, TUNSETIFF, static_cast<void *>(&ifr))))
     {
         // log
