@@ -78,11 +78,12 @@ public:
     }
 
 private:
-    unsigned char *      m_pHead;
-    unsigned char *      m_pTail;
+    unsigned char *m_pHead;
+    unsigned char *m_pTail;
     std::vector<unsigned char> m_buf;
 };
 
 typedef std::unique_ptr<ProtoBuf> ProtoBufPtr;
 
 #endif
+

@@ -6,21 +6,24 @@ extern "C"
 #include <linux/if.h>
 #include <linux/if_tun.h>
 }
+#include <string>
 #include <cstring>
 #include "MsgLogger.h"
-#include "tunnel.h"
+#include "Tunnel.h"
 
-const char *TUN_DEV_NAME = "PaopaoDandan";
+extern MsgLogger logger;
 
-Tunnel *Tunnel::allocTun(TunnelType type)
+static const char *TUN_DEV_NAME = "tap-bubblesunny";
+
+Tunnel *Tunnel::allocTun()
 {
-    char *dev = NULL;
+    char *dev = nullptr;
     struct ifreq ifr;
     int fd = 0, err = 0;
 
     if (0 > (fd = open("/dev/net/tun", O_RDWR)))
     {
-        // log
+        logger.write();
         return nullptr;
     }
     std::memset(&ifr, 0, sizeof(ifr));
@@ -32,23 +35,23 @@ Tunnel *Tunnel::allocTun(TunnelType type)
         return nullptr;
     }
 
-    return new Tunnel(ifr.ifr_name, fd); 
+    return new Tunnel(fd);
 }
 
 Tunnel::~Tunnel()
 {
-    if (m_fd >= 0)
-    {
-        close(m_fd);
-    }
+    close(m_fd);
 }
 
-void Tunnel::read(ProtoBufPtr pBuf)
+void Tunnel::tunRead(char *buf, std::size_t len)
 {
+    ssize_t nBytes = read(m_fd, buf, len);
+
+    if (nBytes > 0)
     return;
 }
 
-void Tunnel::write(ProtoBufPtr pBuf)
+void Tunnel::tunWrite(char *buf, std::size_t len)
 {
     return;
 }
