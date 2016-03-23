@@ -2,6 +2,7 @@ extern "C"
 {
 #include <fcntl.h>
 #include <unistd.h>
+#include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <linux/if.h>
 #include <linux/if_tun.h>
@@ -43,16 +44,13 @@ Tunnel::~Tunnel()
     close(m_fd);
 }
 
-void Tunnel::tunRead(char *buf, std::size_t len)
+ssize_t Tunnel::tunRead(char *buf, std::size_t len)
 {
-    ssize_t nBytes = read(m_fd, buf, len);
-
-    if (nBytes > 0)
-    return;
+    return read(m_fd, buf, len);
 }
 
-void Tunnel::tunWrite(char *buf, std::size_t len)
+ssize_t Tunnel::tunWrite(const char *buf, std::size_t len)
 {
-    return;
+    return write(m_fd, buf, len);
 }
 
