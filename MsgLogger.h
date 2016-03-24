@@ -12,7 +12,6 @@ public:
         MSG_INFO,
         MSG_DBG
     };
-    static MsgLogger *getInstance() { return nullptr; }
     MsgLogger() {}
     ~MsgLogger() {}
     bool write();
