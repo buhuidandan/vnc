@@ -12,9 +12,10 @@ public:
         MSG_INFO,
         MSG_DBG
     };
+
     MsgLogger() {}
     ~MsgLogger() {}
-    bool write();
+    bool write(MSG_LEVEL level, const char *msg, ...);
 };
 
 #endif

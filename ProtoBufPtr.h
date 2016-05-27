@@ -30,6 +30,8 @@ public:
         m_buf = rhs.m_buf;
         m_pHead = rhs.m_pHead-rhs.m_buf.data()+m_buf.data();
         m_pTail = rhs.m_pTail-rhs.m_pHead+m_pHead;
+
+        return *this;
     }
 
     std::size_t totalSize() const { return m_buf.size(); }
