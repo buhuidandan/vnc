@@ -6,6 +6,7 @@ extern "C"
 #include <pthread.h>
 }
 #include <string>
+#include <vector>
 #include "ProtoBufPtr.h"
 
 class TunnelClient
@@ -25,7 +26,7 @@ public:
     bool start();
     bool stop();
     TUN_STATE getState() const { return m_state; }
-    std::size_t tunWrite(ProtoBufPtr pBuf);
+    std::vector<uint8_t> getTunMAC() const { return m_tunMAC; }
 
 private:
     static void *workerThread(void *arg);
@@ -37,12 +38,16 @@ private:
     bool init();
     void tunHandleIO(unsigned events);
     void sockHandleIO(unsigned events);
+    void tunRxIP(ProtoBufPtr pBuf);
+    void tunRxARP(ProtoBufPtr pBuf);
+    bool sendToTun(uint16_t type, ProtoBufPtr pBuf);
 
     std::string m_name;
     TUN_STATE m_state = TUN_UNINITED;
     int m_epollHandle = -1;
     int m_tunHandle = -1;
     int m_sockHandle = -1;
+    std::vector<uint8_t> m_tunMAC;
     pthread_t m_workerID;
 };
 

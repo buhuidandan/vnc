@@ -4,6 +4,7 @@
 #include <cassert>
 #include <vector>
 #include <memory>
+#include "VNCUtil.h"
 
 class ProtoBuf
 {
@@ -18,30 +19,14 @@ public:
         assert(m_pTail <= (m_buf.data() + m_buf.size()));
     }
 
-    ProtoBuf(const ProtoBuf &rhs)
-    {
-        m_buf = rhs.m_buf;
-        m_pHead = rhs.m_pHead-rhs.m_buf.data()+m_buf.data();
-        m_pTail = rhs.m_pTail-rhs.m_pHead+m_pHead;
-    }
-
-    ProtoBuf &operator=(const ProtoBuf &rhs)
-    {
-        m_buf = rhs.m_buf;
-        m_pHead = rhs.m_pHead-rhs.m_buf.data()+m_buf.data();
-        m_pTail = rhs.m_pTail-rhs.m_pHead+m_pHead;
-
-        return *this;
-    }
-
     std::size_t totalSize() const { return m_buf.size(); }
 
-    const unsigned char *data() const { return m_pHead; }
-    unsigned char *data() { return m_pHead; }
+    const uint8_t *data() const { return m_pHead; }
+    uint8_t *data() { return m_pHead; }
 
     std::size_t hdrSize() const { return m_pHead - m_buf.data(); }
 
-    unsigned char *moveHead(int delta)
+    uint8_t *moveHead(int delta)
     {
         assert(m_buf.data() <= m_pHead);
         assert(m_pHead <= m_pTail);
@@ -68,7 +53,7 @@ public:
         return m_buf.data() + m_buf.size() - m_pTail;
     }
 
-    unsigned char *moveTail(int delta)
+    uint8_t *moveTail(int delta)
     {
         assert(m_pHead <= m_pTail);
         assert(m_pTail <= (m_buf.data() + m_buf.size()));
@@ -80,9 +65,9 @@ public:
     }
 
 private:
-    unsigned char *m_pHead;
-    unsigned char *m_pTail;
-    std::vector<unsigned char> m_buf;
+    uint8_t *m_pHead;
+    uint8_t *m_pTail;
+    std::vector<uint8_t> m_buf;
 };
 
 typedef std::unique_ptr<ProtoBuf> ProtoBufPtr;

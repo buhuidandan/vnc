@@ -14,8 +14,44 @@ extern "C"
 #include <iostream>
 #include "MsgLogger.h"
 #include "TunnelClient.h"
+#include "VNCUtil.h"
+
+// Ethnert packet 
+const uint16_t TUN_ETH_TYPE_OFFSET = 12;
+const uint16_t TUN_ETH_HDR_LEN = 14;
+const uint16_t TUN_ETH_MIN_PAYLOAD = 46;
+const uint16_t TUN_ETH_MAX_PAYLOAD = 1500;
+
+// ARP packet
+const uint16_t TUN_HTPYE_OFFSET = 0;
+const uint16_t TUN_PTYPE_OFFSET = 2;
+const uint16_t TUN_HLEN_OFFSET = 4;
+const uint16_t TUN_PLEN_OFFSET = 5;
+const uint16_t TUN_OPER_OFFSET = 6;
+const uint16_t TUN_SHA_OFFSET = 8;
+const uint16_t TUN_SPA_OFFSET = 14;
+const uint16_t TUN_THA_OFFSET = 18;
+const uint16_t TUN_TPA_OFFSET = 24;
+
+const uint16_t TUN_HTYPE_ETH = 0x0001;
+const uint16_t TUN_PTYPE_IPV4 = 0x0800;
+const uint16_t TUN_PLEN_IPV4 = 4;
+const uint16_t TUN_HLEN_MAC = 6;
+const uint16_t TUN_ARP_REQ = 0x0001;
+const uint16_t TUN_ARP_REPLY = 0x0002;
+const uint16_t TUN_ARP_SIZE = 28;
+const uint16_t TUN_IP_PAYLOAD_MAX = 576;
+
+const uint16_t DHCP_SRC_PORT    = 68;
+const uint16_t DHCP_DST_PORT    = 67;
+
+const uint16_t TUN_RX_HDR_SZ = 100;
+const uint16_t TUN_RX_TRL_SZ = 100;
 
 extern MsgLogger logger;
+uint8_t g_tunReadBuf[TUN_ETH_MAX_PAYLOAD+TUN_ETH_HDR_LEN];
+// 10.0.2.10, just used for test. Normally, should read from configuration file.
+const char g_tunIP[TUN_PLEN_IPV4] = {0x0a, 0x00, 0x02, 0x0a};
 
 TunnelClient *TunnelClient::createTunClient(const char *tunName)
 {
@@ -118,9 +154,9 @@ bool TunnelClient::stop()
     return true;
 }
 
-std::size_t TunnelClient::tunWrite(ProtoBufPtr pBuf)
+bool TunnelClient::sendToTun(uint16_t type, ProtoBufPtr pBuf)
 {
-    std::cout << "receive " << pBuf->bodySize() << " bytes:" << std::endl;
+    std::cout << "receive type: " type << "and " << pBuf->bodySize() << " bytes:" << std::endl;
     std::cout << std::hex;
     for (std::size_t i = 0; i != pBuf->bodySize(); ++i)
     {
@@ -148,12 +184,14 @@ int TunnelClient::allocTun(const char *tunName)
     std::memset(&ifr, 0, sizeof(ifr));
     ifr.ifr_flags = IFF_TAP | IFF_NO_PI;
     std::strncpy(ifr.ifr_name, tunName, IFNAMSIZ);
-    if (-1 == ioctl(fd, TUNSETIFF, static_cast<void *>(&ifr)))
+    if (-1 == ioctl(fd, TUNSETIFF, static_cast<void *>(&ifr))
+        || -1 == ioctl(fd, SIOCGIFHWADDR, static_cast<void *>(&ifr)))
     {
         logger.write(MsgLogger::MSG_ERR, "Failed to ioctl tun: %s\n", std::strerror(errno));
         close(fd);
         return -1;
     }
+    m_tunMAC.assign(ifr.ifr_hwaddr.sa_data, ifr.ifr_hwaddr.sa_data+TUN_HLEN_MAC);
 
     return fd;
 }
@@ -207,9 +245,79 @@ bool TunnelClient::init()
         close(m_sockHandle);
         close(m_epollHandle);
         m_tunHandle = m_sockHandle = m_epollHandle = -1;
+        m_tunMAC.clear();
     }
 
     return ret;
+}
+
+void TunnelClient::tunRxIP(ProtoBufPtr pBuf)
+{
+}
+
+void TunnelClient::tunRxARP(ProtoBufPtr pBuf)
+{
+    /* Ethernet ARP Packet for IPv4 Protocol Type
+    ----------------------------------------------------
+    |bits |          0-7         |        8 - 15             |
+    ----------------------------------------------------
+    |    0 |             Hardware Type                  |
+    ----------------------------------------------------
+    |  16 |             Protocol Type                  |
+    ----------------------------------------------------
+    |  32 |HW Addr Len (HLEN)| Protocol Addr Len (PLEN)|
+    ----------------------------------------------------
+    |  48 |                Operation (Req = 1, Reply= 2)  |
+    ----------------------------------------------------
+    |  64 |                Source MAC      (HLEN Byte = 6)|
+    ----------------------------------------------------
+    | 112 |                Source IP        (PLEN Byte = 4)|
+    ----------------------------------------------------
+    | 144 |                Destination MAC (HLEN Byte = 6)|
+    ----------------------------------------------------
+    | 192 |                Destination IP    (PLEN Byte = 4)|
+    ----------------------------------------------------
+    */
+    // ARP packet for Ethernet type IPv4 is 28 bytes, do not process if less than that
+    if(TUN_ARP_SIZE > pBuf->bodySize())
+    {
+        return;
+    }
+
+    uint8_t *p = pBuf->data();
+    uint16_t hType = get_be16(p); // Hardware Type
+    uint16_t ptype = get_be16(p + TUN_PTYPE_OFFSET); // Protocol Type
+    uint16_t operation = get_be16(p + TUN_OPER_OFFSET);
+    uint8_t hlen = *(p + TUN_HLEN_OFFSET); // Length of HW Address in Bytes
+    uint8_t plen = *(p + TUN_PLEN_OFFSET); // Length of IP Address in Bytes
+
+    // Qualify Hardware Type, Protocol Type, HW and Protocol Address Length for IPv4
+    if (!(TUN_HTYPE_ETH == hType && TUN_PTYPE_IPV4 == ptype 
+         && TUN_HLEN_MAC == hlen && TUN_PLEN_IPV4 == plen))
+    {
+        return;
+    }
+    // Process only ARP Request for tunnel
+    if (TUN_ARP_REQ != operation || std::memcmp(p + TUN_TPA_OFFSET, g_tunIP, TUN_PLEN_IPV4))
+    {
+        return;
+    }
+
+    // Construct ARP reply in place
+    set_be16(p + TUN_OPER_OFFSET, TUN_ARP_REPLY); 
+    std::memcpy(p + TUN_THA_OFFSET, p + TUN_SHA_OFFSET, TUN_HLEN_MAC);
+    std::memcpy(p + TUN_TPA_OFFSET, p + TUN_SPA_OFFSET, TUN_PLEN_IPV4);
+    std::memcpy(p + TUN_SHA_OFFSET, m_tunMAC.data(), TUN_HLEN_MAC);
+    std::memcpy(p + TUN_SPA_OFFSET, g_tunIP, TUN_PLEN_IPV4);
+    if (!sendToTun(ETH_P_ARP, std::move(pBuf)))
+    {
+        char tunIP[INET_ADDRSTRLEN] = {0};
+        
+        logger.write(MsgLogger::MSG_ERR, "Failed to send ARP Resp to: %s",
+                        inet_ntop(AF_INET, g_tunIP, tunIP, INET_ADDRSTRLEN));
+    }
+
+    return;
 }
 
 void TunnelClient::tunHandleIO(unsigned events)
@@ -224,8 +332,7 @@ void TunnelClient::sockHandleIO(unsigned events)
     if (events & EPOLLIN)
     {
         // read
-        unsigned char buf[1500] = {0};
-        ssize_t bytesRead = recv(m_sockHandle, buf, 1500, 0);
+        ssize_t bytesRead = recv(m_sockHandle, g_tunReadBuf, sizeof(g_tunReadBuf), 0);
 
         logger.write(MsgLogger::MSG_DBG, "in-event[%lu] of sockHandle, bytesRead: %d\n",
                      ++evtSeq, bytesRead);
@@ -233,13 +340,32 @@ void TunnelClient::sockHandleIO(unsigned events)
         {
             logger.write(MsgLogger::MSG_ERR, "Read from sockHandle error: %s.\n", std::strerror(errno));
         }
+        else if (bytesRead < TUN_ETH_HDR_LEN)
+        {
+            logger.write(MsgLogger::MSG_ERR, "Invalid ethernet frame.\n");
+        }
         else
         {
-            for (ssize_t i = 0; i < bytesRead; ++i)
+            uint8_t *payload = g_tunReadBuf + TUN_ETH_HDR_LEN;
+            std::size_t len = bytesRead - TUN_ETH_HDR_LEN;
+            uint16_t type = get_be16(g_tunReadBuf + TUN_ETH_TYPE_OFFSET);
+            ProtoBufPtr pBuf(new ProtoBuf(TUN_RX_HDR_SZ, len, TUN_RX_TRL_SZ));
+
+            std::memcpy(pBuf->data(), payload, len);
+            switch (type)
             {
-                logger.write(MsgLogger::MSG_DBG, "%#x ", buf[i]);
+                case ETH_P_IP:
+                    logger.write(MsgLogger::MSG_INFO, "IP packet\n");
+                    tunRxIP(std::move(pBuf));
+                    break;
+                case ETH_P_ARP:
+                    logger.write(MsgLogger::MSG_INFO, "ARP packet\n");
+                    tunRxARP(std::move(pBuf));
+                    break;
+                default:
+                    logger.write(MsgLogger::MSG_INFO, "Not support ethernet type: %#x\n", type);
+                    break;
             }
-            logger.write(MsgLogger::MSG_DBG, "\n");
         }
     }
     if (events & EPOLLOUT)
